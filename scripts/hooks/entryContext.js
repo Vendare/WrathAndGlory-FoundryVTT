@@ -77,7 +77,7 @@ export default function() {
                         return ui.notifications.error(game.i18n.localize("ERROR.NoMoreWrath"))
                       else
                       {
-                        actor.update({"data.resources.wrath" : actor.resources.wrath - 1})
+                        actor.update({"system.resources.wrath" : actor.resources.wrath - 1})
                         ui.notifications.notify(game.i18n.localize("NOTE.WrathSubtracted"))
                       }
                     }
@@ -224,19 +224,27 @@ function _dealDamageToTarget(test, target) {
     let damage = test.result.damage.total + (test.result.damage.other?.wounds?.total || 0)
     let res = target.combat.resilience.total || 1
     let invuln = target.combat.resilience.invulnerable
-    let note;
     let promise
 
     let addWounds = 0;
     let addShock = 0;
 
-    if (!invuln)
-        res -= ap
+    if (game.settings.get('wrath-and-glory', 'advancedArmour'))
+    {
+        if (!invuln)
+            res -= (Math.min(ap, target.system.combat.resilience.armour))
+    }
+    else 
+    {
+        if (!invuln)
+            res -= ap
+    }
+
     if (res <= 0)
         res = 1
 
     if (res > damage)
-        note = game.i18n.format("NOTE.APPLY_DAMAGE_RESIST", {name : target.prototypeToken.name});
+        ui.notifications.notify(game.i18n.format("NOTE.APPLY_DAMAGE_RESIST", {name : target.prototypeToken.name}))
 
     if (res == damage)
     {
@@ -260,12 +268,12 @@ function _dealDamageToTarget(test, target) {
     let updateObj = {}
     if (addShock)
     {
-        updateObj["data.combat.shock.value"] = target.combat.shock.value + 1
+        updateObj["system.combat.shock.value"] = target.combat.shock.value + 1
         ui.notifications.notify(game.i18n.format("NOTE.APPLY_DAMAGE_SHOCK", {name : target.prototypeToken.name}));
 }
     if (addWounds)
     {
-        updateObj["data.combat.wounds.value"] = target.combat.wounds.value + addWounds;
+        updateObj["system.combat.wounds.value"] = target.combat.wounds.value + addWounds;
         ui.notifications.notify(game.i18n.format("NOTE.APPLY_DAMAGE", {damage : addWounds, name : target.prototypeToken.name}));
     }
 

@@ -8,7 +8,7 @@ export default class FilterResults extends FormApplication {
         let options = super.defaultOptions;
         options.classes.push("filter-results");
         options.title = "Filter Results";
-        options.template = "systems/wrath-and-glory/template/apps/filter-results.html",
+        options.template = "systems/wrath-and-glory/template/apps/filter-results.hbs",
         options.width = 300,
         options.height = 800,
         options.resizable = true
@@ -75,7 +75,7 @@ export default class FilterResults extends FormApplication {
                 let test = f.test
                 
                 // Convert rarity to a number so that ranges of rarities can be used
-                if (f.property == "data.rarity")
+                if (f.property == "system.rarity")
                 {
                     propValue = this.rarityNumber[propValue]
                     testValue = this.rarityNumber[testValue]

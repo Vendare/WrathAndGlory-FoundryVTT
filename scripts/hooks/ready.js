@@ -5,27 +5,16 @@ export default function() {
     Hooks.once("ready", () => {
         migrateWorld();
         game.counter.render(true)
-
-        for (let key in game.wng.config) {
-            for (let prop in game.wng.config[key]) {
-                if (typeof game.wng.config[key][prop] == "string")
-                    game.wng.config[key][prop] = game.i18n.localize(game.wng.config[key][prop])
-            }
-        }
-
-        for (let effect of CONFIG.statusEffects) {
-            effect.label = game.i18n.localize(effect.label)
-        }
-
-        for (let e in game.wng.config.systemEffects) {
-            let effect = game.wng.config.systemEffects[e]
-            effect.label = game.i18n.localize(effect.label)
-        }
         game.wng.tags.createTags();
+
+        if (game.release.generation == 12)
+        {
+            ui.notifications.warn("Please note that the <strong>Wrath & Glory</strong> system has not been made fully compatible with V12 and issues may occur.")
+        }
     });
     
     CONFIG.ChatMessage.documentClass.prototype.getTest = function () {
-        if (hasProperty(this, "data.flags.wrath-and-glory.testData"))
+        if (hasProperty(this, "flags.wrath-and-glory.testData"))
           return game.wng.rollClasses.WNGTest.recreate(this.getFlag("wrath-and-glory", "testData"))
       }
 

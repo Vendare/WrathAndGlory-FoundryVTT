@@ -10,7 +10,7 @@ export default class ArchetypeGeneric extends FormApplication {
     static get defaultOptions() {
         let options = super.defaultOptions;
         options.classes.push("archetype-generic");
-        options.template =  "systems/wrath-and-glory/template/apps/archetype-generic.html";
+        options.template =  "systems/wrath-and-glory/template/apps/archetype-generic.hbs";
         options.height =  "auto";
         options.width =  285;
         options.title =  "Archetype Item Generic";
@@ -61,7 +61,7 @@ export default class ArchetypeGeneric extends FormApplication {
 
         } 
 
-        this.object.item.update({"data.wargear" : wargear, "data.groups" : groups})
+        this.object.item.update({"system.wargear" : wargear, "system.groups" : groups})
     }
 
 
@@ -78,7 +78,7 @@ export default class ArchetypeGeneric extends FormApplication {
             //  // Add new index to groups (last index + 1)
             // let groups = this.object.item.addToGroup({type : "item", index : (wargear.length - 1 || 0)})
             
-            await this.object.item.update({"data.wargear" : wargear})
+            await this.object.item.update({"system.wargear" : wargear})
             this.render(true);
         })
     }

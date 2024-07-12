@@ -7,7 +7,7 @@ export default class StealthRoll extends WNGTest {
   }
 
   get template() {
-    return "systems/wrath-and-glory/template/chat/roll/stealth/stealth-roll.html"
+    return "systems/wrath-and-glory/template/chat/roll/stealth/stealth-roll.hbs"
   }
 
   async rollTest() {
@@ -31,7 +31,7 @@ export default class StealthRoll extends WNGTest {
   }
 
   async _setStealthScore(stealthScore) {
-    await this.actor.update({"data.combat.stealth" : stealthScore})
+    await this.actor.update({"system.combat.stealth" : stealthScore})
   }
 
   get isShiftable() { return false }
