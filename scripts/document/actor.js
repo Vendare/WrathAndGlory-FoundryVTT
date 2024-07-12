@@ -1,3 +1,4 @@
+import WNGDocumentMixin from "./mixin.js";
 import { WNGTest } from "../common/tests/test.js";
 import WeaponTest from "../common/tests/weapon-test.js";
 import PowerTest from "../common/tests/power-test.js";
@@ -13,54 +14,32 @@ import { RollDialog } from "../common/dialogs/base-dialog.js";
 import { WeaponDialog } from "../common/dialogs/weapon-dialog.js";
 import { PowerDialog } from "../common/dialogs/power-dialog.js";
 
-export class WrathAndGloryActor extends Actor {
-
-    async _preCreate(data, options, user) {
-        if (data._id)
-            options.keepId = WNGUtility._keepID(data._id, this)
-
-        await super._preCreate(data, options, user)
-
-        let initData = {
-            "prototypeToken.bar1": { "attribute": "combat.wounds" },
-            "prototypeToken.bar2": { "attribute": "combat.shock" },
-            "prototypeToken.displayName": CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER,
-            "prototypeToken.displayBars": CONST.TOKEN_DISPLAY_MODES.OWNER_HOVER,
-            "prototypeToken.disposition": CONST.TOKEN_DISPOSITIONS.NEUTRAL,
-            "prototypeToken.name": data.name,
-            "flags.wrath-and-glory.autoCalc.defence": true,
-            "flags.wrath-and-glory.autoCalc.resilience": true,
-            "flags.wrath-and-glory.autoCalc.shock": true,
-            "flags.wrath-and-glory.autoCalc.awareness": true,
-            "flags.wrath-and-glory.autoCalc.resolve": true,
-            "flags.wrath-and-glory.autoCalc.determination": true,
-            "flags.wrath-and-glory.autoCalc.wounds": true,
-            "flags.wrath-and-glory.autoCalc.conviction": true,
-            "flags.wrath-and-glory.autoWounded": true,
-            "flags.wrath-and-glory.autoExhausted": true,
-            "flags.wrath-and-glory.generateMetaCurrencies": true
-        }
-        if (data.type === "agent") {
-            initData["prototypeToken.vision"] = true;
-            initData["prototypeToken.actorLink"] = true;
-        }
-        this.updateSource(initData)
-    }
+export class WrathAndGloryActor extends WNGDocumentMixin(Actor) {
 
     prepareBaseData() {
-        this.itemCategories = this.itemTypes
-        this.itemCategories.all = this.items;
+        // this.propagateDataModels(this.system, "runScripts", this.runScripts.bind(this));
+        this._itemTypes = null; 
         this.derivedEffects = []
         this.system.computeBase();
+        // this.runScripts("prepareBaseData", this);
     }
 
+    prepareDerivedData()
+    {
+        this.runScripts("prePrepareDerivedData", this);
+        this.system.computeDerived();
+        this.items.forEach(i => i.prepareOwnedData());
+    }
+
+
     prepareDerivedData() {
-        for (let item of this.items)
-        {
-            item.prepareOwnedData();
-        }
+        // this.runScripts("prePrepareDerivedData", this);
+        this.system.computeDerived();
+        this.items.forEach(i => i.prepareOwnedData());
+        // this.runScripts("prepareOwnedItems", this);
         this._applyDerivedEffects()
-        this.system.computeDerived(this.itemCategories, this.getFlag("wrath-and-glory", "autoCalc"));
+        this.system.computeDerived();
+        // this.runScripts("postPrepareDerivedData", this);
     }
 
     _applyDerivedEffects() {
@@ -173,45 +152,65 @@ export class WrathAndGloryActor extends Actor {
     async setupWeaponTest(weapon, options={})
     {
         if (typeof weapon == "string")
-            weapon = this.items.get(weapon)
+            weapon = this.items.get(weapon) || await fromUuid(weapon)
+
+        options.combi = weapon.system.combi.document ? await Dialog.confirm({title : "Combi-Weapons", content : "Fire both Combi-Weapons?"}) : false
 
         let tests = []
+        let multi = options.combi ? 2 : 0;
+
         // If targets, call this function again with single target option
         if (game.user.targets.size)
         {
             let targets = Array.from(game.user.targets)
             game.user.updateTokenTargets([])
+            options.multi = targets.length + multi;
             // Function needs to return an array of WeaponTests so need to do some funky stuff to convert
-            targets.forEach(target => tests.push(this.setupWeaponTest(weapon, {target, multi : targets.length})))
-
+            targets.forEach(target => {
+                options.target = target;
+                tests.push(this._promptWeaponDialog(weapon, options))
+                if (options.combi)
+                {
+                    tests.push(this._promptWeaponDialog(weapon.system.combi.document, options))
+                }
+            })
             tests = await Promise.all(tests)
-            tests = tests.map(t => t[0])
+        }
+        else 
+        {
+            options.multi = multi;
+            tests = [await this._promptWeaponDialog(weapon, options)];
+            if (options.combi)
+            {
+                tests.push(await this._promptWeaponDialog(weapon.system.combi.document, options))
+            }
         }
 
-        else // If no target or target supplied in options
-        {
-            let dialogData = this._weaponDialogData(weapon, {multi : options.multi, targets : [options.target].filter(t => t)});
-            dialogData.title = `${weapon.name} Test`
-            this._addOptions(dialogData, options)
-            dialogData.type = "weapon"
-            dialogData.skill = weapon.isMelee ? "weaponSkill" : "ballisticSkill"
-            dialogData.attribute = weapon.skill.attribute
-            let testData = await WeaponDialog.create(dialogData)
-            testData.targets = dialogData.targets
-            testData.title = dialogData.title
-            testData.speaker = this.speakerData();
-            testData.itemId = weapon.id
-            testData.skill = dialogData.skill
-            testData.attribute = dialogData.attribute
-            ui.sidebar.activateTab("chat")
-            tests =  [new WeaponTest(testData)]
-        }
+
         return tests
+    }
+
+    async _promptWeaponDialog(weapon, options)
+    {
+        let dialogData = this._weaponDialogData(weapon, {multi : options.multi, targets : [options.target].filter(t => t)});
+        dialogData.title = `${weapon.name} Test`
+        this._addOptions(dialogData, options)
+        dialogData.type = "weapon"
+        dialogData.skill = weapon.isMelee ? "weaponSkill" : "ballisticSkill"
+        dialogData.attribute = weapon.getSkillFor(this).attribute
+        let testData = await WeaponDialog.create(dialogData)
+        testData.targets = dialogData.targets
+        testData.title = dialogData.title
+        testData.speaker = this.speakerData();
+        testData.itemId = weapon.uuid
+        testData.skill = dialogData.skill
+        testData.attribute = dialogData.attribute
+        return new WeaponTest(testData);
     }
 
     async setupPowerTest(power, options = {}) {
         if (typeof power == "string")
-            power = this.items.get(power)
+            power = this.items.get(power) || await fromUuid(power)
 
         let dialogData = this._powerDialogData(power);
         dialogData.title = `${power.name}`
@@ -223,7 +222,7 @@ export class WrathAndGloryActor extends Actor {
         testData.targets = dialogData.targets
         testData.title = dialogData.title
         testData.speaker = this.speakerData();
-        testData.itemId = power.id
+        testData.itemId = power.uuid
         testData.skill = dialogData.skill
         testData.attribute = dialogData.attribute
         ui.sidebar.activateTab("chat")
@@ -275,8 +274,7 @@ export class WrathAndGloryActor extends Actor {
             wrath: {
                 base: this.hasCondition("dying") ? 1 + this.itemCategories["traumaticInjury"].length : 1
             },
-            changeList: this.getDialogChanges({ condense: true }),
-            changes: this.getDialogChanges(),
+            changes: this.allDialogChanges( {targets : Array.from(game.user.targets).map(t => t.actor)}),
             actor: this,
             targets: Array.from(game.user.targets)
         };
@@ -287,24 +285,30 @@ export class WrathAndGloryActor extends Actor {
 
         let dialogData = this._baseDialogData()
         if (options.targets)
+        {
             dialogData.targets = options.targets;
+            dialogData.changes = this.allDialogChanges({targets: options.targets.map(i => i.actor), vehicle : weapon.actor?.type == "vehicle" ? weapon.actor : null});
+            // Weapon dialogs need to get dialog changes separately because of special target handling
+        }
 
         if (weapon.Ammo) {
             // Add ammo dialog changes if any exist
-            dialogData.changeList = this.getDialogChanges({ condense: true, add: weapon.Ammo.ammoDialogEffects, targets : dialogData.targets })
-            dialogData.changes = this.getDialogChanges({ add: weapon.Ammo.ammoDialogEffects, targets : dialogData.targets })
+            weapon.Ammo.effects.forEach(e => {
+                mergeObject(dialogData.changes, e.getDialogChanges())
+            })
         }
         dialogData.weapon = weapon
-        dialogData.pool.size = weapon.skill.total;
+        dialogData.skill = weapon.getSkillFor(this)
+        dialogData.pool.size = dialogData.skill.total;
         dialogData.pool.bonus = weapon.attack.base + weapon.attack.bonus;
         if (this.isMob)
             dialogData.pool.bonus += Math.ceil(this.mob / 2)
         dialogData.pool.rank = weapon.attack.rank;
         dialogData.damageValues = weapon.damageValues
 
-        dialogData.damage = duplicate(weapon.damage)
-        dialogData.ed = duplicate(weapon.ed)
-        dialogData.ap = duplicate(weapon.ap)
+        dialogData.damage = duplicate(weapon.system.damage)
+        dialogData.ed = duplicate(weapon.system.damage.ed)
+        dialogData.ap = duplicate(weapon.system.damage.ap)
 
         if (weapon.isMelee) {
             dialogData.damage.base += this.attributes.strength.total
@@ -346,7 +350,7 @@ export class WrathAndGloryActor extends Actor {
 
 
         // If using melee and target has parry weapon equipped, increase difficulty
-        if (weapon.system.category == "melee" && target.actor.getItemTypes("weapon").find(i => i.equipped && i.traitList["parry"]))
+        if (weapon.system.category == "melee" && target.actor.itemTypes.weapon.find(i => i.equipped && i.traitList["parry"]))
         {
             dialogData.difficulty.penalty += 1;
         }
@@ -373,7 +377,7 @@ export class WrathAndGloryActor extends Actor {
     _powerDialogData(power) {
         let dialogData = this._baseDialogData()
         dialogData.power = power
-        dialogData.difficulty.target = power.DN
+        dialogData.difficulty.target = power.system.DN
         if (!Number.isNumeric(dialogData.difficulty.target)) {
             ui.notifications.warn(game.i18n.localize("DIALOG.TARGET_DEFENSE_WARNING"))
         }
@@ -411,15 +415,15 @@ export class WrathAndGloryActor extends Actor {
         }
     }
 
-    getDialogChanges({ condense = false, add = [], targets=[] } = {}) {
-        let effects = Array.from(this.effects).concat(add);
+    allDialogChanges({targets=[], vehicle} = {}) {
+        let effects = this.effects.contents.concat(vehicle?.effects.contents || []);
         // Aggregate dialog changes from each effect
-        let changes = effects.filter(i => !i.disabled).reduce((prev, current) => prev.concat(current.getDialogChanges({ condense, indexOffset: prev.length })), [])
+        let changes = effects.filter(e => !e.disabled).reduce((prev, current) => mergeObject(prev, current.getDialogChanges()), {})
 
         if (targets.length) {
-            let target = targets[0].actor
-            let targetChanges = target.effects.reduce((prev, current) => prev.concat(current.getDialogChanges({ target, condense, indexOffset: changes.length })), [])
-            changes = changes.concat(targetChanges)
+            let target = targets[0]
+            let targetChanges = target.effects.filter(e => !e.disabled).reduce((prev, current) => mergeObject(prev, current.getDialogChanges({target : true})), {})
+            mergeObject(changes, targetChanges);
         }
 
         return changes
@@ -483,9 +487,9 @@ export class WrathAndGloryActor extends Actor {
             // Remove IDs so items work within the update method
             items.forEach(i => delete i._id)
 
-            actorData.img = archetype.img
-            actorData.token.img = archetype.img.replace("images", "tokens")
-            actorData.token.img = archetype.img.replace("actors", "tokens")
+            actorData.name = archetype.name;
+            actorData.img = archetype.img;
+            actorData.prototypeToken.texture.src = archetype.img.replace("images", "tokens").replace("actors", "tokens")
 
             await this.update(actorData)
 
@@ -524,7 +528,6 @@ export class WrathAndGloryActor extends Actor {
         return this.type == "threat" && this.mob > 1
     }
 
-
     async addCondition(effect, flags = {}) {
         if (typeof (effect) === "string")
             effect = duplicate(CONFIG.statusEffects.concat(Object.values(game.wng.config.systemEffects)).find(e => e.id == effect))
@@ -545,8 +548,8 @@ export class WrathAndGloryActor extends Actor {
             await this.addCondition("prone")
 
         if (!existing) {
-            effect.label = game.i18n.localize(effect.label)
-            effect["flags.core.statusId"] = effect.id;
+            effect.name = game.i18n.localize(effect.name)
+            effect.statuses = [effect.id];
             delete effect.id
             return this.createEmbeddedDocuments("ActiveEffect", [effect])
         }
@@ -568,17 +571,18 @@ export class WrathAndGloryActor extends Actor {
         }
     }
 
-    get archetype() { return this.getItemTypes("archetype")[0] }
-    get species() { return this.getItemTypes("species")[0] }
-    get faction() { return this.getItemTypes("faction")[0] }
+    get archetype() { return this.itemTypes.archetype[0] }
+    get species() { return this.itemTypes.species[0] }
+    get faction() { return this.itemTypes.faction[0] }
 
     hasCondition(conditionKey) {
-        let existing = this.effects.find(i => i.getFlag("core", "statusId") == conditionKey)
+        let existing = this.effects.find(e => e.statuses.has(conditionKey))
         return existing
     }
 
+
     hasKeyword(keyword) {
-        return !!this.getItemTypes("keyword").find(i => i.name == keyword)
+        return !!this.itemTypes.keyword.find(i => i.name == keyword)
     }
 
 
@@ -598,9 +602,17 @@ export class WrathAndGloryActor extends Actor {
             return game.wng.config.vehicleTraits
     }
 
-    getItemTypes(type) {
-        return (this.itemCategories || this.itemTypes)[type]
+    _itemTypes = null;
+
+    get itemTypes()
+    {
+      if (!this._itemTypes)
+      {
+        this._itemTypes = super.itemTypes;
+      }
+      return this._itemTypes
     }
+  
 
     getAttributeCosts(rating) {
         switch (rating) {

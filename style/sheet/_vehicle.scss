@@ -13,6 +13,9 @@
         width: 100%;
       }
     }
+    .name {
+      flex: 2;
+    }
     .defence {
       // flex: 0.665;
     }
@@ -20,29 +23,37 @@
 }
 
   .main.tab {
-    .crew-list {
+    .main-lists {
       height: calc(100% - 120px);
       overflow: auto;
       margin-bottom: 10px;
       padding-right: 5px;
-      .complement-list {
-        .header {
-          input {
-            height: 100%;
-            width: 25px;
-            border: none;
-            background: #444;
-            color: white;
-            box-shadow: none;
-          }
-        }
+      width: 100%;
 
-        .item {
-          flex: 0 0 25px;
+
+    }
+  }
+
+  .crew-list
+  {
+    .complement-list {
+      .header {
+        input {
+          height: 100%;
+          width: 25px;
+          border: none;
+          background: #444;
+          color: white;
+          box-shadow: none;
         }
+      }
+
+      .item {
+        flex: 0 0 25px;
       }
     }
   }
+
 
   .wrapper.traits {
     .wrapper-item {
@@ -54,6 +65,17 @@
         align-items: center;
         justify-content: space-around;
       }
+    }
+  }
+
+  .tab[data-tab=notes].active
+  {
+    height: calc(100% - 10px);
+    .notes-tab .editor{
+      height: calc(100% - 50px);
+    }
+    .notes-tab .editor-content {
+      height: calc(100%);
     }
   }
 }

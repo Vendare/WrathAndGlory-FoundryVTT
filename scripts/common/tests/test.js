@@ -75,7 +75,7 @@ export class WNGTest {
       new WrathDie({ number: this.result.wrathSize, faces: 6 })
     ])
 
-    return this.roll.evaluate({ async: true });
+    return this.roll.evaluate();
   }
 
   _computeResult() {
@@ -331,7 +331,7 @@ export class WNGTest {
     const html = await renderTemplate(this.template, this);
     let chatData = {
       type: CONST.CHAT_MESSAGE_TYPES.ROLL,
-      roll: this.roll,
+      rolls: [this.roll],
       flags: { "wrath-and-glory.testData": this.data },
       user: game.user.id,
       rollMode: game.settings.get("core", "rollMode"),
@@ -413,7 +413,7 @@ export class WNGTest {
       other: duplicate(this.testData.otherDamage || {})
     }
     this.result.damage.total = this.result.damage.flat + this.context.edit.damage
-    this.result.damage.ed = { number: this.testData.ed.base + this.testData.ed.bonus + this.getRankNum(this.testData.ed.rank) + this.testData.shifted.damage.length + this.context.edit.ed };
+    this.result.damage.ed = { number: this.testData.ed.base + this.testData.ed.bonus + this.getRankNum(this.testData.ed.rank) + this.testData.shifted.damage.length + this.context.edit.ed};
     this.result.damage.ed.values = this.testData.ed.damageValues
   }
 
@@ -439,6 +439,17 @@ export class WNGTest {
         4: 1,
         5: 2,
         6: 2
+      }
+      if (game.actors.get(this.data.context.targets[0]?.actorId)?.type == "vehicle")
+      {
+        damage.ed.values = {
+          1: 1,
+          2: 1,
+          3: 1,
+          4: 2,
+          5: 2,
+          6: 2
+        }
       }
     }
 
@@ -500,7 +511,7 @@ export class WNGTest {
 
   get testEffects() {
     if (this.item) {
-      let effects = this.item.effects.filter(e => !e.data.transfer)
+      let effects = this.item.effects.filter(e => !e.transfer)
       if (this.item.isRanged && this.item.Ammo)
         effects = effects.concat(this.item.Ammo.ammoEffects)
       return effects
@@ -534,9 +545,9 @@ export class WNGTest {
   get context() { return this.data.context; }
   get result() { return this.data.result; }
   get attribute() { return this.actor.attributes[this.data.testData.attribute] }
-  get skill() { return this.actor.skills[this.data.testData.skill] }
+  get skill() { return this.actor.system.skills[this.data.testData.skill] }
 
-  get item() { return this.actor.items.get(this.testData.itemId) }
+  get item() { return fromUuidSync(this.testData.itemId) }
   get actor() { return game.wng.utility.getSpeaker(this.context.speaker) }
   get message() { return game.messages.get(this.context.messageId) }
 
@@ -559,8 +570,8 @@ export class PoolDie extends Die {
   static DENOMINATION = "p"
 
   /**@overide */
-  roll(...args) {
-    let roll = super.roll(...args)
+  async roll(...args) {
+    let roll = await super.roll(...args)
     roll.value = this.options.values[Math.min(roll.result + this.options.add, 6)]
     if (roll.result === 6) {
       roll.name = "icon",
@@ -621,8 +632,8 @@ export class WrathDie extends Die {
   static DENOMINATION = "w"
 
   /**@overide */
-  roll(...args) {
-    let roll = super.roll(...args)
+  async roll(...args) {
+    let roll = await super.roll(...args)
     if (roll.result === 6) {
       roll.name = "wrath-critical",
         roll.canShift = true,

@@ -11,7 +11,9 @@ export class VehicleSheet extends BaseWnGActorSheet {
         options.resizable = true;
         options.tabs = [{ navSelector: ".sheet-tabs", contentSelector: ".sheet-body", initial: "main", }]
         options.dragDrop.concat([{dragSelector: ".actor-list .actor"}, {}])
-      return options
+        options.scrollY.push(".main-lists");
+
+        return options
     }
 
     async getData() {
@@ -42,10 +44,16 @@ export class VehicleSheet extends BaseWnGActorSheet {
     constructItemLists(sheetData) {
         let items = {}
 
-        items.ammo = this.actor.getItemTypes("ammo")
-        items.gear = this.actor.getItemTypes("gear")
-        items.keywords = this.actor.getItemTypes("keyword")
-        items.weapons = this.actor.getItemTypes("weapon")
+        items.ammo = this.actor.itemTypes.ammo
+        items.gear = this.actor.itemTypes.gear
+        items.keywords = this.actor.itemTypes.keyword
+        items.weapons = this.actor.itemTypes.weapon
+        items.equipped = {
+            weapons : items.weapons.filter(i => i.system.equipped),    
+        }
+
+        items.equipped.ammo = items.equipped.weapons.map(i => this.actor.items.get(i.ammo)).filter(i => !!i).filter((item, index, self) => self.findIndex(dup => dup.id == item.id) == index) //remove duplicate
+        
 
         sheetData.items = items;
 
@@ -56,21 +64,21 @@ export class VehicleSheet extends BaseWnGActorSheet {
         sheetData.inventory = {
             weapons: {
                 header: "HEADER.WEAPON",
-                items: this.actor.getItemTypes("weapon"),
+                items: this.actor.itemTypes.weapon,
                 equippable: true,
                 quantity: true,
                 type: "weapon"
             },
             gear: {
                 header: "HEADER.GEAR",
-                items: this.actor.getItemTypes("gear"),
+                items: this.actor.itemTypes.gear,
                 equippable: false,
                 quantity: true,
                 type: "gear"
             },
             ammo: {
                 header: "HEADER.AMMO",
-                items: this.actor.getItemTypes("ammo"),
+                items: this.actor.itemTypes.ammo,
                 equippable: false,
                 quantity: true,
                 type: "ammo"
@@ -124,9 +132,24 @@ export class VehicleSheet extends BaseWnGActorSheet {
         })
 
         html.find(".vehicle-traits").click(ev => {
-              new ItemTraits(this.object).render(true)
-          })
-      
+            new ItemTraits(this.object).render(true)
+        })
+
+        html.find(".roll-weapon").click(async ev => {
+            let actor = await this.actor.system.complement.choose();
+            const div = $(ev.currentTarget).parents(".item");
+            let id = div.data("itemId");
+            let weapon = this.actor.items.get(id);
+            if (weapon)
+            {
+                let tests = await actor.setupWeaponTest(weapon);
+                for(let test of tests)
+                {
+                    await test.rollTest();
+                    test.sendToChat();
+                }
+            }
+        });
     }
 
 }

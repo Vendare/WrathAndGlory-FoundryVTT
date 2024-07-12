@@ -22,35 +22,21 @@ export class WrathAndGloryItem extends Item {
     }
 
     _preUpdate(updateData, options, user) {
-        if (hasProperty(updateData, "system.quantity") && updateData.system.quantity < 0)
-            updateData.system.quantity = 0;
         if (getProperty(updateData, "system.type") == "corruption")
             setProperty(updateData, "system.specification", "corruption")
     }
 
-    prepareData() {
-        super.prepareData()
-        if (this.type == "weapon")
-            this.applyUpgrades();
+    prepareBaseData()
+    {
+        this.system.computeBase();
     }
-
+    prepareDerivedData()
+    {
+        this.system.computeDerived();
+    }
+    
     prepareOwnedData() {
-        let functionName = `prepareOwned${this.type[0].toUpperCase() + this.type.slice(1)}`
-
-        if (this[functionName])
-            this[functionName]()
-    }
-
-
-    prepareOwnedWeapon() {
-        if (this.isRanged && this.category == "launcher" && this.Ammo) {
-            this.system.damage = this.Ammo.damage
-            this.system.ap = this.Ammo.ap
-            this.system.ed = this.Ammo.ed
-        }
-        if (this.isRanged && this.Ammo) {
-            this.applyAmmo()
-        }
+        this.system.computeOwned()
     }
 
     async sendToChat() {
@@ -71,96 +57,9 @@ export class WrathAndGloryItem extends Item {
         ChatMessage.create(chatData);
     }
 
-    _dataWithRank(type) {
-        let data = this[type]
-        let damage = data.base + data.bonus;
-        let rank = "";
-        if (data.rank === "single") {
-            rank = " + R";
-        } else if (data.rank === "double") {
-            rank = " + DR";
-        }
-        return `${damage}${rank}`;
-    }
-
 
     _dropdownData() {
         return { text: this.description }
-    }
-
-
-    applyUpgrades() {
-
-        if (this.system.upgradesApplied)
-            return
-        else 
-            this.system.upgradesApplied = true;
-
-        this._applyEffects(this.Upgrades.reduce((effects, upgrade) => {
-            return effects.concat(Array.from(upgrade.effects))
-        }, []))
-
-        this._addTraits(this.Upgrades.reduce((traits, upgrade) => {
-            return traits.concat(upgrade.traits)
-        }, []))
-    }
-
-    applyAmmo() {
-        this._applyEffects(this.Ammo.effects)
-        this._addTraits(this.Ammo.traits)
-    }
-
-
-    _applyEffects(effects) {
-        let overrides = {}
-        // Organize non-disabled effects by their application priority
-        const changes = effects.reduce((changes, e) => {
-            if (e.disabled) return changes;
-            return changes.concat(e.changes.map(c => {
-                c = foundry.utils.duplicate(c);
-                c.effect = e;
-                c.priority = c.priority ?? (c.mode * 10);
-                return c;
-            }));
-        }, []);
-        changes.sort((a, b) => a.priority - b.priority);
-
-        // Apply all changes
-        for (let change of changes) {
-            const result = change.effect.apply(this, change);
-            if (result !== null) overrides[change.key] = result;
-        }
-
-    }
-
-
-    _addTraits(traits) {
-        let add = traits.filter(i => i.type == "add")
-        let remove = traits.filter(i => i.type == "remove")
-
-        add.forEach(trait => {
-            let existing = this.system.traits.find(i => i.name == trait.name)
-            if (!existing)
-                this.system.traits.push(trait)
-            else if (existing && Number.isNumeric(trait.rating))
-                existing.rating = parseInt(existing.rating) + parseInt(trait.rating)
-        })
-
-        remove.forEach(trait => {
-            let existing = this.system.traits.find(i => i.name == trait.name)
-            let existingIndex = this.system.traits.findIndex(i => i.name == trait.name)
-            if (existing) {
-                if (trait.rating && Number.isNumeric(trait.rating)) {
-                    existing.rating = parseInt(existing.rating) - parseInt(trait.rating)
-                    if (existing.rating <= 0)
-                        this.system.traits.splice(existingIndex, 1)
-                }
-                else {
-                    this.system.traits.splice(existingIndex, 1)
-                }
-            }
-        })
-
     }
 
     handleArchetypeItem(item)
@@ -175,31 +74,31 @@ export class WrathAndGloryItem extends Item {
                 diff : {}
             })
             let groups = this.addToGroup({index: wargear.length - 1, type : "item"})
-            return this.update({"data.wargear" : wargear, "data.groups" : groups})
+            return this.update({"system.wargear" : wargear, "system.groups" : groups})
         }
         if(item.type == "ability")
         {
-            return this.update({"data.ability.id" : item.uuid, "data.ability.name" : item.name})
+            return this.update({"system.ability.id" : item.uuid, "system.ability.name" : item.name})
         }
         if(item.type == "faction")
         {
-            return this.update({"data.faction.id" : item.uuid, "data.faction.name" : item.name})
+            return this.update({"system.faction.id" : item.uuid, "system.faction.name" : item.name})
         }
         if(item.type == "species")
         {
-            return this.update({"data.species.id" : item.uuid, "data.species.name" : item.name})
+            return this.update({"system.species.id" : item.uuid, "system.species.name" : item.name})
         }
         if (item.type == "talent")
-        {   
+        {
             let talents = duplicate(this.suggested.talents)
             talents.push({"id" : item.id, "name" : item.name})
-            this.update({"data.suggested.talents" : talents})
+            this.update({"system.suggested.talents" : talents})
         }
         if (item.type == "keyword")
         {
             let keywords = duplicate(this.keywords)
             keywords.push(item.name)
-            this.update({"data.keywords" : keywords})
+            this.update({"system.keywords" : keywords})
         }
     }
 
@@ -209,10 +108,10 @@ export class WrathAndGloryItem extends Item {
         {
             let abilities = duplicate(this.abilities);
             abilities.push({id : item.uuid, name : item.name})
-            return this.update({"data.abilities" : abilities})
+            return this.update({"system.abilities" : abilities})
         }
     }
-    
+
     addToGroup(object)
     {
         let groups = duplicate(this.groups)
@@ -223,12 +122,12 @@ export class WrathAndGloryItem extends Item {
 
     resetGroups()
     {
-        this.update({ "data.groups": {type: "and", groupId: "root", items : Array.fromRange(this.wargear.length).map(i => {return {type: "item", index : i, groupId : randomID()}})} }) // Reset item groupings
+        this.update({ "system.groups": {type: "and", groupId: "root", items : Array.fromRange(this.wargear.length).map(i => {return {type: "item", index : i, groupId : randomID()}})} }) // Reset item groupings
     }
 
     _deleteIndex(index, path)
     {
-        let array = duplicate(getProperty(this.data, path))
+        let array = duplicate(getProperty(this, path))
         array.splice(index, 1)
         this.update({ [path]: array})
     }
@@ -247,8 +146,8 @@ export class WrathAndGloryItem extends Item {
         let existing = this.hasCondition(effect.id)
 
         if (!existing) {
-            effect.label = game.i18n.localize(effect.label)
-            effect["flags.core.statusId"] = effect.id;
+            effect.name = game.i18n.localize(effect.name)
+            effect.statuses = [effect.id];
             delete effect.id
             return this.createEmbeddedDocuments("ActiveEffect", [effect])
         }
@@ -272,7 +171,7 @@ export class WrathAndGloryItem extends Item {
 
 
     hasCondition(conditionKey) {
-        let existing = this.effects.find(i => i.getFlag("core", "statusId") == conditionKey)
+        let existing = this.effects.find(e => e.statuses.has(conditionKey))
         return existing
     }
 
@@ -280,145 +179,58 @@ export class WrathAndGloryItem extends Item {
         /**
      * Override update to account for archetype parent
      */
-         async update(data={}, context={}) 
+         async update(data={}, context={})
          {
              // If this item is from an archetype entry, update the diff instead of the actual item
-             // I would like to have done this is the item's _preCreate but the item seems to lose 
+             // I would like to have done this is the item's _preCreate but the item seems to lose
              // its "archetype" reference so it has to be done here
              // TODO: Current Issue - changing a property, then changing back to the original value
              // does not work due to `diffObject()`
-     
+
              if (this.archetype) {
                  // Get the archetype's equipment, find the corresponding object, add to its diff
-     
-                 let list = duplicate(getProperty(this.archetype.data, this.archetypeItemPath))
+
+                 let list = duplicate(getProperty(this.archetype, this.archetypeItemPath))
                  let item = list[this.archetypeItemIndex];
                  mergeObject( // Merge current diff with new diff
                  item.diff,
                  diffObject(this.toObject(), data),
                  { overwrite: true })
-         
+
                  // If the diff includes the item's name, change the name stored in the archetype
                  if (item.diff.name)
                  item.name = item.diff.name
                  else
                  item.name = this.name
-     
+
                  this.archetype.update({ [`${this.archetypeItemPath}`]: list })
                  data={}
              }
              return super.update(data, context)
          }
-     
+
 
 
     // @@@@@@ FORMATTED GETTERs @@@@@@
-    get Range() {
-        if (this.isRanged) {
-            if (this.category == "launcher" || this.category == "grenade-missile") 
-            {
-                if (this.actor)
-                    return this.range.thrown * this.actor.attributes.strength.total
-                else 
-                    return `S x ${this.range.thrown}`
-            }
-            else {
-                const short = this.range.short < 1 ? "-" : this.range.short;
-                const medium = this.range.medium < 1 ? "-" : this.range.medium;
-                const long = this.range.long < 1 ? "-" : this.range.long;
-                const salvo = this.salvo < 1 ? "-" : this.salvo;
-                return `${salvo} | ${short} / ${medium} / ${long}`;
-            }
-        }
-        else if (this.isMelee) {
-            return this.range.melee
-        }
-    }
 
-    get Damage() {
-        let damage = Number(this._dataWithRank("damage"));
-        if (this.isMelee && this.isOwned)
-            damage += this.actor.attributes.strength.total
-        return damage
-    }
-    get ED() {
-        return this._dataWithRank("ed");
-    }
-    get AP() {
-        return this._dataWithRank("ap");
-    }
 
-    get Activation() {
-        return game.wng.config.powerActivations[this.activation]
-    }
-    get Rarity() {
-        return game.wng.config.rarity[this.rarity]
-    }
-    get Category() {
-        switch (this.category) {
-            case "melee":
-                return game.i18n.localize("CATEGORY.MELEE");
-            case "ranged":
-                return game.i18n.localize("CATEGORY.RANGED");
-            default:
-                return game.i18n.localize("CATEGORY.MELEE");
-        }
-    }
-
-    get MultiTarget() {
-        return this.multiTarget ? game.i18n.localize("Yes") : game.i18n.localize("No")
-    }
 
     get isMelee() {
-        return this.category == "melee"
+        return this.system.isMelee
     }
 
     get isRanged() {
-        return this.category == "ranged" || this.category == "launcher" || this.category == "grenade-missile"
-    }
-
-    get Traits() {
-        return Object.values(this.traitList).map(i => i.display)
-    }
-
-    get TraitsAdd() {
-        return Object.values(this.traitList).filter(i => i.type == "add").map(i => i.display)
-    }
-
-
-    get TraitsRemove() {
-        return Object.values(this.traitList).filter(i => i.type == "remove").map(i => i.display)
+        return this.system.isRanged
     }
 
     get traitList() {
-        let traits = {}
-        this.system.traits.forEach(i => {
-
-            if (i.custom) 
-            {
-                traits[i.name] = duplicate(i)
-            }
-            else 
-            {
-                traits[i.name] = {
-                    name: i.name,
-                    display: this.traitsAvailable[i.name],
-                    type: i.type
-                }
-                if (game.wng.config.traitHasRating[i.name]) {
-                    traits[i.name].rating = i.rating;
-                    traits[i.name].display += ` (${i.rating})`
-                }
-            }
-        })
-        return traits
+        return this.system.traits.obj;
     }
-
 
     async GetArchetypeItems() {
         let items = [];
 
-        let species = game.wng.utility.findItem(this.species.id, "species")
+        let species = await game.wng.utility.findItem(this.species.id, "species")
         let faction = game.wng.utility.findItem(this.faction.id, "faction")
 
         let speciesAbilities = species.abilities.map(i => game.wng.utility.findItem(i.id, "ability"))
@@ -427,7 +239,7 @@ export class WrathAndGloryItem extends Item {
 
 
         // Get all archetype talents/wargear, merge with diff
-        for (let i of this.suggested.talents.concat(this.wargear))
+        for (let i of this.suggested.talents.concat(this.wargear.filter(k => k.id)))
         {
             let item = await game.wng.utility.findItem(i.id)
             if (item)
@@ -437,39 +249,37 @@ export class WrathAndGloryItem extends Item {
             }
         }
 
-        items = await Promise.all(items.concat(
-            [species], 
+        items = (await Promise.all(items.concat(
+            [species],
             [this],
             [faction],
             [archetypeAbility],
             speciesAbilities,
-            keywords))
+            keywords)))
             .filter(i => i)
             .map(i => i instanceof Item ? i.toObject() : i)
+
+        items.filter(i => ["weapon", "armour"].includes(i.type)).forEach(i => i.system.equipped = true)
 
         return items
     }
 
-    get Upgrades() {
-        return this.upgrades.map(i => new CONFIG.Item.documentClass(i))
-    }
-
-    get traitsAvailable() {
-        if (this.type == "weapon" || this.type == "weaponUpgrade" || this.type == "ability" || this.type == "ammo")
-            return game.wng.config.weaponTraits
-        else if (this.type == "armour")
-            return game.wng.config.armourTraits
-    }
 
 
     get skill() {
-        if (this.isOwned) {
+        return this.getSkillFor(this.actor);
+    }
+
+    getSkillFor(actor)
+    {
+        if (actor)
+        {
             if (this.type == "psychicPower")
-                return this.actor.skills.psychicMastery
+                return actor.system.skills.psychicMastery
             else if (this.isMelee)
-                return this.actor.skills.weaponSkill
+                return actor.system.skills.weaponSkill
             else
-                return this.actor.skills.ballisticSkill
+                return actor.system.skills.ballisticSkill
         }
         else {
             if (this.type == "psychicPower")
@@ -485,17 +295,12 @@ export class WrathAndGloryItem extends Item {
         if (!this.isOwned)
             return
         if (this.category == "ranged")
-            return this.actor.getItemTypes("ammo")
+            return this.actor.itemTypes.ammo
         else if (this.category == "launcher")
-            return this.actor.getItemTypes("weapon").filter(i => i.category == "grenade-missile")
+            return this.actor.itemTypes.weapon.filter(i => i.category == "grenade-missile")
         else if (this.category == "grenade-missile")
             return [this]
 
-    }
-
-    get Ammo() {
-        if (this.isOwned)
-            return this.actor.items.get(this.ammo)
     }
 
     // effects that exist on ammo type items that do not apply to the weapon
@@ -531,22 +336,15 @@ export class WrathAndGloryItem extends Item {
             return []
     }
 
-    get Journal() {
-        return fromUuid(this.journal)
-    }
-
     async showInJournal() {
-        let journal = await this.Journal
-
-        if (journal instanceof JournalEntry)
-            return journal.sheet.render(true)
-        else if (journal instanceof JournalEntryPage) 
-            return journal.showInJournal()
-
-    }
-
-    get AbilityType() {
-        return game.wng.config.abilityTypes[this.abilityType]
+        let journal = await fromUuid(this.journal)
+        let page;
+        if (journal instanceof JournalEntryPage)
+        {
+            page = journal;
+            journal = journal.parent;
+        }
+        journal.sheet.render(true, {pageId : page?.id})
     }
 
     get rollable() {
@@ -557,9 +355,9 @@ export class WrathAndGloryItem extends Item {
         }
 
     }
-
+    
     get hasDamage() {
-        return (this.damage && (this.damage.base || this.damage.bonus || this.damage.rank != "none")) || (this.ed && (this.ed.base || this.ed.bonus || this.ed.rank != "none") || (this.otherDamage.shock || this.otherDamage.wounds || this.otherDamage.mortalWounds))
+        return (this.damage && (this.damage.base || this.damage.bonus || this.damage.rank != "none")) || (this.damage?.ed && (this.damage?.ed.base || this.damage?.ed.bonus || this.damage?.ed.rank != "none") || (this.damage?.otherDamage.shock || this.damage?.otherDamage.wounds || this.damage?.otherDamage.mortalWounds))
     }
 
     get damageValues() {
@@ -585,19 +383,6 @@ export class WrathAndGloryItem extends Item {
 
     get hasTest() {
         return this.test && Number.isNumeric(this.test.dn) && this.test.type
-    }
-
-    get DN() {
-        if (!this.dn)
-            return "?"
-        if (Number.isNumeric(this.dn))
-            return parseInt(this.dn)
-        else if (this.dn.includes("@") && game.user.targets.size)
-        {
-            let target = Array.from(game.user.targets)[0]
-            return (0, eval)(Roll.replaceFormulaData(this.dn, target.actor.getRollData()))
-        }
-        else return "?"
     }
 
     // @@@@@@ TYPE GETTERS @@@@@@
@@ -641,10 +426,10 @@ export class WrathAndGloryItem extends Item {
     get prerequisites() { return this.system.prerequisites }
     get potency() { return this.system.potency }
     get damage() { return this.system.damage }
-    get otherDamage() { return this.system.otherDamage }
-    get ed() { return this.system.ed }
+    get otherDamage() { return this.system.damage.otherDamage }
+    get ed() { return this.system.damage.ed }
     get attack() { return this.system.attack }
-    get ap() { return this.system.ap }
+    get ap() { return this.system.damage.ap }
     get category() { return this.system.category }
     get salvo() { return this.system.salvo }
     get upgrades() { return this.system.upgrades || []}

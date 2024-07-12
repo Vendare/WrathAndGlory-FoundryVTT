@@ -1,17 +1,18 @@
-import { BaseWnGActorModel } from "./components/base";
+import { TraitsModel } from "../item/components/traits";
+import { BaseActorModel } from "./components/base";
 import { VehicleComplement } from "./components/crew";
 import { VehicleCombatModel } from "./components/vehicle-combat";
 
 const fields = foundry.data.fields;
 
-export class VehicleModel extends BaseWnGActorModel {
+export class VehicleModel extends BaseActorModel {
     static defineSchema() {
         let schema = super.defineSchema();
         schema.complement = new fields.EmbeddedDataField(VehicleComplement);
         schema.mnvr = new fields.NumberField();
         schema.rarity = new fields.StringField();
         schema.value = new fields.NumberField();
-        schema.traits = new fields.ArrayField(new fields.ObjectField());
+        schema.traits = new fields.EmbeddedDataField(TraitsModel)
         schema.combat = new fields.EmbeddedDataField(VehicleCombatModel)
         schema.notes = new fields.StringField()
 
@@ -20,24 +21,25 @@ export class VehicleModel extends BaseWnGActorModel {
 
     computeBase() {
         super.computeBase();
-        this.complement.findDocuments(game.actors);     
-        
-        this.traits.forEach(i => {
-                i.display = game.wng.config.vehicleTraits[i.name];
-                if (game.wng.config.traitHasRating[i.name]) {
-                    traits[i.name].display += ` (${i.rating})`
-                }
-            }
-        )
+        this.complement.findDocuments(game.actors);
     }
 
-    computeDerived(items, autoCalc)
+    computeDerived()
     {
-
+        let pilot = this.complement.activePilot
+        let pilotInit = (pilot?.system.attributes.initiative.total || 0)
+        this.combat.defence.total = Math.min(pilotInit, this.mnvr) + this.combat.defence.bonus;
     }
 
-    
-    get displayTraits() {
-        return Object.values(this.traits).map(i => i.display).join(", ")
+    get traitsAvailable() {
+        return game.wng.config.vehicleTraits
+    }
+
+    static migrateData(data)
+    {
+        if (data.traits instanceof Array)
+        {
+            data.traits = {list : data.traits};
+        }
     }
 }

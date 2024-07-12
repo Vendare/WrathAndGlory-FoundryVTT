@@ -1,6 +1,5 @@
-import { WrathAndGloryActor } from "../actor/actor.js";
 import WNGUtility from "../common/utility.js";
-import { WrathAndGloryItem } from "../item/item.js";
+import { WrathAndGloryItem } from "../document/item.js";
 import ArchetypeGroups from "./archetype-groups.js";
 import FilterResults from "./filter-results.js";
 
@@ -30,9 +29,9 @@ export default class CharacterCreation extends FormApplication {
     }
 
 
-    initializeCharacter()
+    async initializeCharacter()
     {
-        this.character = new WrathAndGloryActor({type: "agent", name : this.object.actor.name}) // Temporary actor 
+        this.character = await Actor.create({type: "agent", name : this.object.actor.name, system : game.system.model.Actor.agent}, {temporary : true}) // Temporary actor 
 
         // Can't just merge object because actor attributes/skills are an object, archetype and species have just numbers
         for (let attribute in this.character.attributes)
@@ -65,7 +64,7 @@ export default class CharacterCreation extends FormApplication {
         this.archetypeAbility = await this.archetypeAbility
         this.speciesAbilities = await Promise.all(this.species.abilities.map(i => game.wng.utility.findItem(i.id, "ability")))
 
-        this.initializeCharacter()
+        await this.initializeCharacter()
 
         data.actor = this.actor;
         data.character = this.character
@@ -74,8 +73,24 @@ export default class CharacterCreation extends FormApplication {
         data.faction = this.faction;
         data.archetypeAbility = this.archetypeAbility
         data.speciesAbilities = this.speciesAbilities
+        data.enrichment = await this._handleEnrichment(data)
         data.wargearHTML = this.constructWargearHTML();
         return data
+    }
+
+    async _handleEnrichment(data)
+    {   
+        let enrichment = {};
+
+        if (data.archetypeAbility)
+        {
+            enrichment[data.archetypeAbility.id] = await TextEditor.enrichHTML(data.archetypeAbility.description);
+        }
+        for(let ability of data.speciesAbilities)
+        {
+            enrichment[ability.id] = await TextEditor.enrichHTML(ability.description);
+        }
+        return enrichment
     }
 
 
@@ -178,7 +193,7 @@ export default class CharacterCreation extends FormApplication {
                 else 
                 {
                     faction.effects[0].transfer = true;
-                    faction.effects[0].label = $(ev.currentTarget).find(".background-bonus").children("option").filter(":selected").text()
+                    faction.effects[0].name = $(ev.target).find(".background-bonus").children("option").filter(":selected").text()
                     // Gross but whatever, uses the selected text (with background name appended) as the effect name
                 }
             }
@@ -398,7 +413,7 @@ export default class CharacterCreation extends FormApplication {
             else 
                 stat = parent.attr("data-skill")
             
-            let statObj = duplicate(getProperty(this.character, `${target}.${stat}`))
+            let statObj = getProperty(this.character.toObject(false), `system.${target}.${stat}`)
 
             if (ev.target.classList.contains("inc"))
             {
@@ -524,7 +539,7 @@ export default class CharacterCreation extends FormApplication {
         let html = "<option value=''>-</option>"
 
         backgroundsChosen.forEach(bg => {
-            html += `<option value=${bg.id}>${bg.effect.label} (${this.faction.backgrounds[bg.type][bg.index]?.name})</option>`
+            html += `<option value=${bg.id}>${bg.effect.name} (${this.faction.backgrounds[bg.type][bg.index]?.name})</option>`
         })
         return html
     }
